@@ -5,17 +5,11 @@ import numpy as np
 import cv2 as cv
 import imutils
 
-WINDOW_NAME = '[Ball tracking] Elfimov 6222'
-
-greenLower = (29, 86, 6)
-greenUpper = (64, 255, 255)
-
 maxDequeLen = 64
 pts = deque(maxlen=maxDequeLen)
 
 cap = cv.VideoCapture(0)
 
-# allow the camera to warm up
 time.sleep(2.0)
 
 if not cap.isOpened():
@@ -29,43 +23,40 @@ while True:
 		print("Can't receive frame (stream end?). Exiting ...")
 		break
 
-	# resize the frame, blur it, and convert it to the HSV
-	# color space
-	frame = imutils.resize(frame, width=600)
-	blurred = cv.GaussianBlur(frame, (11, 11), 0)
-	hsv = cv.cvtColor(blurred, cv.COLOR_BGR2HSV)
+	# resize the frame
+	frame = imutils.resize(frame, width=500)
+	# blur it
+	frame_gau_blurred = cv.GaussianBlur(frame, (11, 11), 0)
+	# convert from BGR to HSV color space
+	hsv = cv.cvtColor(frame_gau_blurred, cv.COLOR_BGR2HSV)
 
-	# construct a mask for the color XXX, then perform
-	# a series of dilations and erosions to remove any small
-	# blobs left in the mask
-	mask = cv.inRange(hsv, greenLower, greenUpper)
-	mask = cv.erode(mask, None, iterations=2)
-	mask = cv.dilate(mask, None, iterations=2)
+	# range of color
+	lower_color = np.array([30, 100, 100])
+	upper_color = np.array([90, 255, 255])
 
-	# find contours in the mask and initialize the current
-	# (x, y) center of the ball
-	cnts = cv.findContours(mask.copy(), cv.RETR_EXTERNAL,
-							cv.CHAIN_APPROX_SIMPLE)
-	cnts = imutils.grab_contours(cnts)
-	center = None
-	# only proceed if at least one contour was found
-	if len(cnts) > 0:
-		# find the largest contour in the mask, then use
-		# it to compute the minimum enclosing circle and
-		# centroid
-		c = max(cnts, key=cv.contourArea)
-		((x, y), radius) = cv.minEnclosingCircle(c)
-		M = cv.moments(c)
-		center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
-		# only proceed if the radius meets a minimum size
-		if radius > 10:
-			# draw the circle and centroid on the frame,
-			# then update the list of tracked points
-			cv.circle(frame, (int(x), int(y)), int(radius),
-					   (0, 255, 255), 2)
-			cv.circle(frame, center, 5, (0, 0, 255), -1)
-	# update the points queue
-	pts.appendleft(center)
+	# getting the range of blue color in frame
+	color_range = cv.inRange(hsv, lower_color, upper_color)
+	hsv = cv.erode(hsv, None, iterations=2)
+	hsv = cv.dilate(hsv, None, iterations=2)
+
+	res_color = cv.bitwise_and(frame_gau_blurred,frame_gau_blurred, mask=color_range)
+
+	color_s_gray = cv.cvtColor(res_color, cv.COLOR_BGR2GRAY)
+
+	#canny_edge = cv.Canny(color_s_gray, 50, 240)
+
+	circles = cv.HoughCircles(color_s_gray, cv.HOUGH_GRADIENT_ALT, dp=1,
+							   minDist=50, param1=400, param2=0.7,
+							   minRadius=10, maxRadius=100)
+
+	if circles is not None:
+		circles = np.uint16(np.around(circles))
+		for i in circles[0, :]:
+			# drawing on detected circle and its center
+			center = (i[0], i[1])
+			cv.circle(frame, center, i[2], (0, 255, 0), 2)
+			cv.circle(frame, center, 2, (0, 0, 255), 3)
+			pts.appendleft(center)
 
 	# loop over the set of tracked points
 	for i in range(1, len(pts)):
@@ -78,7 +69,9 @@ while True:
 		thickness = int(np.sqrt(maxDequeLen / float(i + 1)) * 2.5)
 		cv.line(frame, pts[i - 1], pts[i], (0, 0, 255), thickness)
 	# show the frame to our screen
-	cv.imshow(WINDOW_NAME, mask)
+	cv.imshow('CIRCLES', frame)
+	cv.imshow('GRAY', color_s_gray)
+	#cv.imshow('CANNY', canny_edge)
 	key = cv.waitKey(1) & 0xFF
 	# if the 'q' key is pressed, stop the loop
 	if key == ord("q"):
