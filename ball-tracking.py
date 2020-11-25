@@ -8,7 +8,11 @@ import imutils
 maxDequeLen = 64
 pts = deque(maxlen=maxDequeLen)
 
-cap = cv.VideoCapture(0)
+# turning on main web-cam
+# cap = cv.VideoCapture(0)
+
+# turning on iVCam app
+cap = cv.VideoCapture(1)
 
 time.sleep(2.0)
 
@@ -26,37 +30,40 @@ while True:
 	# resize the frame
 	frame = imutils.resize(frame, width=500)
 	# blur it
-	frame_gau_blurred = cv.GaussianBlur(frame, (11, 11), 0)
+	frame_gau_blurred = cv.GaussianBlur(frame, (13, 13), 0)
 	# convert from BGR to HSV color space
 	hsv = cv.cvtColor(frame_gau_blurred, cv.COLOR_BGR2HSV)
 
 	# range of color
-	lower_color = np.array([30, 100, 100])
-	upper_color = np.array([90, 255, 255])
+	lower_color = np.array([145, 50, 50])
+	upper_color = np.array([170, 255, 255])
 
-	# getting the range of blue color in frame
-	color_range = cv.inRange(hsv, lower_color, upper_color)
-	hsv = cv.erode(hsv, None, iterations=2)
-	hsv = cv.dilate(hsv, None, iterations=2)
+	# getting the range of pink color in frame
+	color_mask = cv.inRange(hsv, lower_color, upper_color)
+	color_mask = cv.erode(color_mask, None, iterations=3)
+	color_mask = cv.dilate(color_mask, None, iterations=3)
 
-	res_color = cv.bitwise_and(frame_gau_blurred,frame_gau_blurred, mask=color_range)
+	res_color = cv.bitwise_and(frame_gau_blurred, frame_gau_blurred, mask=color_mask)
 
 	color_s_gray = cv.cvtColor(res_color, cv.COLOR_BGR2GRAY)
 
-	#canny_edge = cv.Canny(color_s_gray, 50, 240)
+	# canny_edge = cv.Canny(color_s_gray, 50, 240)
 
-	circles = cv.HoughCircles(color_s_gray, cv.HOUGH_GRADIENT_ALT, dp=1,
-							   minDist=50, param1=400, param2=0.7,
-							   minRadius=10, maxRadius=100)
+	circles = cv.HoughCircles(color_s_gray, cv.HOUGH_GRADIENT_ALT, dp=1.5,
+							minDist=20, param1=100, param2=0.8,
+							minRadius=10, maxRadius=-1)
 
+	center = None
 	if circles is not None:
 		circles = np.uint16(np.around(circles))
-		for i in circles[0, :]:
+		max_circle = max(circles[0,:], key=lambda x:x[2])
+
+		for i in [max_circle]:
 			# drawing on detected circle and its center
 			center = (i[0], i[1])
 			cv.circle(frame, center, i[2], (0, 255, 0), 2)
-			cv.circle(frame, center, 2, (0, 0, 255), 3)
-			pts.appendleft(center)
+			cv.circle(frame, center, 2, (255, 0, 0), 3)
+	pts.appendleft(center)
 
 	# loop over the set of tracked points
 	for i in range(1, len(pts)):
@@ -67,11 +74,12 @@ while True:
 		# otherwise, compute the thickness of the line and
 		# draw the connecting lines
 		thickness = int(np.sqrt(maxDequeLen / float(i + 1)) * 2.5)
-		cv.line(frame, pts[i - 1], pts[i], (0, 0, 255), thickness)
+		cv.line(frame, pts[i - 1], pts[i], (255, 0, 0), thickness)
 	# show the frame to our screen
 	cv.imshow('CIRCLES', frame)
+	# cv.imshow('COLOR MASK', color_mask)
 	cv.imshow('GRAY', color_s_gray)
-	#cv.imshow('CANNY', canny_edge)
+	# cv.imshow('CANNY', canny_edge)
 	key = cv.waitKey(1) & 0xFF
 	# if the 'q' key is pressed, stop the loop
 	if key == ord("q"):
